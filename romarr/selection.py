@@ -461,6 +461,14 @@ def judge(release: Release, wanted: str,
     if platform is not None:
         if _has_extension(lowered, platform.extensions):
             add(60, f"carries a {platform.name} ROM extension")
+        elif platform.slug == "switch" and any(
+                _mentions(lowered, marker) for marker in ("nsp", "xci")):
+            # NSP/XCI identify Switch packages even in a label such as
+            # [Switch NSP]. Treating that as weaker than a filename suffix
+            # let a one-seeder .nsp outrank the same game with eleven seeds.
+            # This is still title evidence, not a verified file or live swarm.
+            # Generic formats (ISO/BIN) cannot identify a platform this way.
+            add(60, f"labels a {platform.name} package format")
         elif _mentions(lowered, platform.slug.lower()) or any(
                 _mentions(lowered, alias) for alias in platform.aliases):
             add(30, f"names {platform.name}")
