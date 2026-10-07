@@ -7,16 +7,35 @@ def number(value,default=0):
   result=float(value)
   return result if math.isfinite(result) else default
  except (ValueError,TypeError):return default
+def connected_count(value):
+ # Missing/invalid evidence is unknown, not zero available sources.
+ if isinstance(value,bool):return None
+ result=number(value,None)
+ return int(result) if result is not None and result>=0 else None
 def qbit_row(x):
  state=str(x.get('state') or '');progress=min(1,max(0,number(x.get('progress'))))
- status='downloading';detail=''
- if state in ('metaDL','forcedMetaDL'):status='metadata';detail='Waiting for torrent metadata from peers; no game data yet.'
+ seeds=connected_count(x.get('num_seeds'));leechers=connected_count(x.get('num_leechs'))
+ speed=max(0,number(x.get('dlspeed')))
+ status='downloading';detail='';availability='transferring' if speed>0 else 'waiting-data'
+ if state in ('metaDL','forcedMetaDL'):
+  status='metadata';availability='waiting-metadata'
+  detail='Waiting for torrent metadata; game files cannot download until metadata arrives.'
+  if seeds==0 and leechers:
+   detail+=' Connected peers are leechers, with no connected seeds; they may not have the metadata or game data needed.'
+  elif seeds==0 and leechers==0:
+   detail+=' No peers are currently connected.'
+  elif seeds:
+   detail+=' A seed connection is visible, but it has not supplied the metadata yet.'
  elif state in ('error','missingFiles'):status='failed';detail='Download client reports '+state
  elif state in ('pausedDL','stoppedDL'):status='paused'
- elif state=='stalledDL':status='stalled';detail='No data arriving from peers.'
+ elif state=='stalledDL':
+  status='stalled';detail='No game data is arriving from connected peers.'
+  if seeds==0:
+   availability='no-connected-seeds';detail+=' No seeds are currently connected; other peers may only hold part of the game.'
  elif state.startswith('checking'):status='verifying'
  elif progress>=1:status='downloaded';detail='Download complete; awaiting library import.'
- return {'job_id':safe_job_id(x.get('hash')),'release':x.get('name',''),'client':'qBittorrent','status':status,'detail':detail,'progress':round(progress*100,1),'speed':max(0,number(x.get('dlspeed'))),'eta_seconds':number(x.get('eta')) if x.get('eta') is not None and 0<=number(x.get('eta'),8640000)<8640000 else None,'peers':int(max(0,number(x.get('num_seeds')))+max(0,number(x.get('num_leechs')))),'size':x.get('size',0),'downloaded':x.get('downloaded',0)}
+ if status not in ('metadata','stalled','downloading'):availability=None
+ return {'job_id':safe_job_id(x.get('hash')),'release':x.get('name',''),'client':'qBittorrent','status':status,'detail':detail,'availability':availability,'progress':round(progress*100,1),'speed':speed,'eta_seconds':number(x.get('eta')) if x.get('eta') is not None and 0<=number(x.get('eta'),8640000)<8640000 else None,'peers':(seeds or 0)+(leechers or 0),'connected_seeds':seeds,'connected_leechers':leechers,'size':x.get('size',0),'downloaded':x.get('downloaded',0)}
 def sab_row(x,history=False):
  from .download_failures import DETAILS,sab_failure_code
  state=str(x.get('status',''));status={'Downloading':'downloading','Paused':'paused','Queued':'queued','Fetching':'metadata','Completed':'downloaded','Failed':'failed','Verifying':'verifying','Repairing':'repairing','Extracting':'extracting','Moving':'importing'}.get(state,'processing')
@@ -37,8 +56,6 @@ def snapshot(service, *, force=False):
      for job in jobs:
       row=qbit_row(job)
       row['network_status']=network['status'];row['network_detail']=network['detail']
-      if row['status'] in ('metadata','stalled') and network['status'] in ('dns-errors','tracker-errors'):
-       row['detail']+=' '+network['detail']
       rows.append(row)
     elif c.__class__.__name__=='SABnzbd':
      for mode in ('history','queue'):
@@ -88,14 +105,15 @@ def enrich(service,rows,live=None):
     # Keep both visible without reviving the request or scheduling a retry.
     row.update(client_status=match['status'],client_detail=match.get('detail',''),
                client_progress=match.get('progress'))
+    for field in ('connected_seeds','connected_leechers','peers','availability'):
+     if field in match:row[field]=match[field]
     if match.get('network_status'):
      row.update(network_status=match['network_status'],network_detail=match['network_detail'])
     if ('no import after' in row.get('detail','').casefold()
         or 'timed out' in row.get('detail','').casefold()):
      if match['status']=='metadata':
       row['client_detail']='Request tracking timed out; the downloader is still waiting for metadata. No game data has arrived.'
-      if match.get('network_status') in ('dns-errors','tracker-errors'):
-       row['client_detail']+=' '+match['network_detail']
+      row['client_detail']+=' '+match.get('detail','')
    else:row.update(match)
   elif row['status'] in ('downloading','queued'):
    detail=('Multiple matching downloads are visible. Review the client to identify this request.'

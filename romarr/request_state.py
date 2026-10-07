@@ -23,7 +23,7 @@ def base_status(service):
   for item in service.queue:
    k=key(item.game,item.platform)
    row=rows.setdefault(k,{'id':k,'game':item.game,'platform':item.platform})
-   row.update(status={'grabbed':'downloading','queued':'queued','imported':'imported','failed':'failed'}.get(item.state,item.state),detail=item.detail,release=item.release,client=getattr(item,"download_client",""),indexer=getattr(item,"indexer",""),review_required=getattr(item,"review_required",False),download_job_id=getattr(item,"download_job_id",""))
+   row.update(status={'grabbed':'downloading','queued':'queued','imported':'imported','failed':'failed'}.get(item.state,item.state),detail=item.detail,release=item.release,client=getattr(item,"download_client",""),indexer=getattr(item,"indexer",""),indexer_seeders=getattr(item,"seeders",None),review_required=getattr(item,"review_required",False),download_job_id=getattr(item,"download_job_id",""))
   for w in service.store.missing():
    k=key(w['game'],w['platform'])
    rows.setdefault(k,{'id':k,'game':w['game'],'platform':w['platform'],'status':'wanted','detail':w.get('last_error','')})
