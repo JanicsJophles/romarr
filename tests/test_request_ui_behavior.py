@@ -106,6 +106,10 @@ assert.equal(indexerSeedLabel({seeders:0}), '0 reported by indexer');
 assert.equal(indexerSeedLabel({seeders:63}), '63 reported by indexer');
 for(const seeders of [null,undefined,-1,Infinity,'63'])assert.equal(indexerSeedLabel({seeders}),'Not reported by indexer');
 assert.equal(indexerSeedLabel({protocol:'usenet',seeders:0}),'Not applicable (Usenet)');
+for(const client of ['SABnzbd','NZBGet']){
+ assert.equal(indexerSeedLabel({download_client:client,seeders:0}),'Not applicable (Usenet)');
+ assert.deepEqual(requestTransferStats({client,indexer_seeders:0}),[]);
+}
 const stats=requestTransferStats({speed:0,peers:2,connected_seeds:0,connected_leechers:2,downloaded:0,size:0});
 assert.deepEqual(stats,['0.00 MB/s','0 connected seeds','2 connected leechers','2 connected peers total','No game data downloaded']);
 assert.deepEqual(requestTransferStats({connected_seeds:null,connected_leechers:-1,peers:'2',size:NaN,indexer_seeders:null}),[]);
