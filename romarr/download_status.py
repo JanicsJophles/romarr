@@ -35,7 +35,7 @@ def qbit_row(x):
  elif state.startswith('checking'):status='verifying'
  elif progress>=1:status='downloaded';detail='Download complete; awaiting library import.'
  if status not in ('metadata','stalled','downloading'):availability=None
- return {'job_id':safe_job_id(x.get('hash')),'release':x.get('name',''),'client':'qBittorrent','status':status,'detail':detail,'availability':availability,'progress':round(progress*100,1),'speed':speed,'eta_seconds':number(x.get('eta')) if x.get('eta') is not None and 0<=number(x.get('eta'),8640000)<8640000 else None,'peers':(seeds or 0)+(leechers or 0),'connected_seeds':seeds,'connected_leechers':leechers,'size':x.get('size',0),'downloaded':x.get('downloaded',0)}
+ return {'job_id':safe_job_id(x.get('hash')),'release':x.get('name',''),'client':'qBittorrent','status':status,'detail':detail,'availability':availability,'progress':round(progress*100,1),'speed':speed,'eta_seconds':number(x.get('eta')) if x.get('eta') is not None and 0<=number(x.get('eta'),8640000)<8640000 else None,'peers':seeds+leechers if seeds is not None and leechers is not None else None,'connected_seeds':seeds,'connected_leechers':leechers,'size':x.get('size',0),'downloaded':x.get('downloaded',0)}
 def sab_row(x,history=False):
  from .download_failures import DETAILS,sab_failure_code
  state=str(x.get('status',''));status={'Downloading':'downloading','Paused':'paused','Queued':'queued','Fetching':'metadata','Completed':'downloaded','Failed':'failed','Verifying':'verifying','Repairing':'repairing','Extracting':'extracting','Moving':'importing'}.get(state,'processing')

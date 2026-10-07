@@ -111,9 +111,11 @@ assert.deepEqual(stats,['0.00 MB/s','0 connected seeds','2 connected leechers','
 assert.deepEqual(requestTransferStats({connected_seeds:null,connected_leechers:-1,peers:'2',size:NaN,indexer_seeders:null}),[]);
 assert.deepEqual(requestTransferStats({connected_seeds:0,indexer_seeders:63}),['0 connected seeds','63 seeds reported by indexer (not live)']);
 assert.deepEqual(requestTransferStats({indexer_seeders:0}),['0 seeds reported by indexer (not live)']);
-assert.match(requestAvailabilityNote({status:'metadata'}),/Connected peers may not have/);
+assert.match(requestAvailabilityNote({status:'metadata',client:'qBittorrent'}),/Connected peers may not have/);
 assert.match(requestAvailabilityNote({status:'grabbed'}),/not that game data is downloading/);
 assert.equal(requestAvailabilityNote({status:'imported'}),'');
+assert.equal(requestAvailabilityNote({status:'metadata',client:'SABnzbd'}),'');
+assert.equal(requestAvailabilityNote({status:'stalled'}),'');
 ''')
 
 

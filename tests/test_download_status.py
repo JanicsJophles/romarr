@@ -49,3 +49,8 @@ def test_failed_request_keeps_outcome_and_exposes_exact_job_peer_evidence():
  assert result['status']=='failed' and result['client_status']=='metadata'
  assert result['connected_seeds']==0 and result['connected_leechers']==2
  assert 'GLOBAL TRACKER WARNING' not in result['client_detail']
+
+
+def test_unknown_connected_counts_do_not_become_zero_total_peers():
+ for fields in ({}, {'num_seeds':0}, {'num_leechs':2}, {'num_seeds':False,'num_leechs':2}):
+  assert qbit_row({'state':'metaDL', **fields})['peers'] is None

@@ -767,8 +767,8 @@ function requestTransferStats(row){
  return stats;
 }
 function requestAvailabilityNote(row){
- if(row.status==='metadata')return 'The client is waiting for the torrent file list. Connected peers may not have the metadata or game data. Indexer seed counts can be stale; they are not live client connections.';
- if(row.status==='stalled')return 'The download is not currently receiving data. Indexer seed counts do not guarantee a reachable source with the needed pieces.';
+ if(row.status==='metadata'&&row.client==='qBittorrent')return 'The client is waiting for the torrent file list. Connected peers may not have the metadata or game data. Indexer seed counts can be stale; they are not live client connections.';
+ if(row.status==='stalled'&&row.client==='qBittorrent')return 'The download is not currently receiving data. Indexer seed counts do not guarantee a reachable source with the needed pieces.';
  if(row.status==='queued'||row.status==='grabbed')return 'Sent to the download client. This confirms the handoff, not that game data is downloading.';
  return '';
 }
