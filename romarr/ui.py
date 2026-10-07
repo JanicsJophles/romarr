@@ -760,6 +760,7 @@ function requestTransferStats(row){
  if(number(row.connected_seeds))stats.push(`${row.connected_seeds} connected seeds`);
  if(number(row.connected_leechers))stats.push(`${row.connected_leechers} connected leechers`);
  if(number(row.peers))stats.push(`${row.peers} connected peers total`);
+ if(number(row.indexer_seeders))stats.push(`${row.indexer_seeders} seeds reported by indexer (not live)`);
  if(number(row.size)&&row.size>0)stats.push(`${number(row.downloaded)?(row.downloaded/1048576).toFixed(0)+' / ':''}${(row.size/1048576).toFixed(0)} MB`);
  else if(number(row.downloaded))stats.push(row.downloaded===0?'No game data downloaded':`${(row.downloaded/1048576).toFixed(1)} MB downloaded`);
  if(number(row.eta_seconds)&&row.eta_seconds>0)stats.push(`${Math.ceil(row.eta_seconds/60)} min remaining`);
@@ -782,7 +783,7 @@ async function saveGameRequest(game,platform){
  try{
   const response=await fetch('/api/v1/game-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({game,platform}),signal:controller.signal});
   const result=await response.json();
-  if(!response.ok||result.error||!result.request)throw Error(result.error||'Could not confirm this request. Check Your requests before retrying.');
+  if(!response.ok||result?.error||!result?.request||typeof result.request.status!=='string'||!result.request.status.trim())throw Error(result?.error||'Could not confirm this request. Check Your requests before retrying.');
   return result;
  }catch(e){if(e.name==='AbortError')throw Error('Request confirmation timed out. Check Your requests; it may already be saved.');throw e}
  finally{clearTimeout(timeout)}
