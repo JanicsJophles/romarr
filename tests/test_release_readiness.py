@@ -22,6 +22,11 @@ class DurableRequestGates(unittest.TestCase):
         p.start(); self.addCleanup(p.stop)
         p = patch.object(rs, 'ACTIVE', set())
         p.start(); self.addCleanup(p.stop)
+        # Patching the shared threading module also intercepted background
+        # hash workers from other service fixtures. Isolate this module's
+        # thread factory so the dispatch assertions observe request work only.
+        p = patch.object(rs, 'threading', SimpleNamespace(Thread=threading.Thread))
+        p.start(); self.addCleanup(p.stop)
         self.service = Mock()
         self.service.queue = []
         self.service.store.missing.return_value = []
@@ -116,7 +121,7 @@ class TelemetryGates(unittest.TestCase):
     def test_nullable_client_fields_do_not_break_telemetry(self):
         row = ds.qbit_row({'progress':None, 'eta':None, 'num_seeds':None, 'num_leechs':None})
         self.assertIsNone(row['eta_seconds'])
-        self.assertEqual(row['peers'], 0)
+        self.assertIsNone(row['peers'])
 
     def test_progress_is_bounded(self):
         self.assertLessEqual(ds.qbit_row({'progress':4})['progress'], 100)
