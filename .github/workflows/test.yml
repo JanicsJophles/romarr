@@ -14,12 +14,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Set up Node for browser behavior tests
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
       - name: Test in an isolated Python environment
         shell: bash
         run: |
           set -euo pipefail
+          # These pytest cases otherwise skip silently when Node is absent.
+          node --version
           test_env=$(mktemp -d "$RUNNER_TEMP/romarr-python.XXXXXX")
           trap 'rm -rf "$test_env"' EXIT
           python3 -m venv "$test_env"
           "$test_env/bin/python" -m pip install -r requirements-dev.txt
-          "$test_env/bin/python" -m pytest
+          "$test_env/bin/python" -m pytest -ra
