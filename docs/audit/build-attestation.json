@@ -1,0 +1,23 @@
+{
+  "recorded_at": "2026-10-07T06:42:49.053846+00:00",
+  "image_id": "sha256:d595f54fe5132870d662902eaf74ce6e4e46f8e34da5eb0787237f9c91b9d7a6",
+  "platform": "linux/amd64",
+  "base_image": "python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a",
+  "scanner": "Trivy 0.75.0",
+  "sbom_components": 41,
+  "license_detections": 73,
+  "vulnerability_findings": 0,
+  "secret_findings": 0,
+  "build_context_archive": {
+    "file": "romarr-build-context.tar.gz",
+    "sha256": "72188c039ec6ee5c2264b44f14d7d7276a6aea3533531a37ba2e0645f1ef5cc1",
+    "files": 49,
+    "format": "sorted USTAR, uid/gid/mtime=0, mode=0644, gzip mtime=0",
+    "scope": "Explicit Docker build context allowlist; source Python files, entrypoint, Dockerfile, requirements, LICENSE, NOTICE, .dockerignore. Excludes configuration, credentials, VCS, tests and documentation."
+  },
+  "limitations": [
+    "This records one resolved image and scan snapshot, not bit-for-bit reproducibility or a guarantee against unknown vulnerabilities.",
+    "Runtime Python dependency versions are pinned; requirements are not yet a wheel/hash lock.",
+    "Alpine build repositories remain mutable. License inventory includes OS and Python components with licenses distinct from this project MIT license."
+  ]
+}

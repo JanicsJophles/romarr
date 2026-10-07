@@ -1,0 +1,20 @@
+name: Bug report
+description: Report reproducible behavior using redacted or synthetic data.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps and build version
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or screenshots
+      description: Never include API keys, private hosts, credentials, or downloaded content.
