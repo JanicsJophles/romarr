@@ -56,7 +56,7 @@ from .decompress import run_batch as run_decompress_batch, scan_compressed
 from .titled import TitleDBIndex, build_index as build_titled_index, validate_switch_rom
 from .downloaders import (
     CLIENT_TYPES, NZBGet, NzbgetConfig, SABnzbd, SabConfig, build_client,
-    hand_off, merge_secrets, pick_client, redact,
+    hand_off, hand_off_receipt, merge_secrets, pick_client, redact,
 )
 from .indexers import INDEXER_TYPES, build_indexer, redact_indexer
 from .indexers import Prowlarr, ProwlarrConfig
@@ -1535,7 +1535,8 @@ class ROMarr:
         if external_request_id:
             self.store.mark_seerr_dispatching(external_request_id,
                                                f"{client.name} {pick.protocol} handoff")
-        ok = hand_off(client, pick.download_url, name=pick.title)
+        receipt = hand_off_receipt(client, pick.download_url, name=pick.title)
+        ok = receipt.accepted
         item = QueueItem(game, platform_slug, pick.title, pick.seeders,
                          "grabbed" if ok else "failed",
                          "" if ok else f"{client.name} did not accept the handoff; check client connectivity and settings",
@@ -1544,6 +1545,7 @@ class ROMarr:
                          size=getattr(pick, "size", 0),
                          release_fault=False,
                          download_client=getattr(client, "name", ""),
+                         download_job_id=receipt.job_id,
                          review_required=not ok,
                          external_request_id=external_request_id)
         self.store.enqueue(item)
@@ -4306,9 +4308,14 @@ class ROMarr:
                 if not isinstance(name, str) or not name:
                     continue
                 with self._lock:
+                    from .download_identity import matches_job
+                    report = {**report, "client": getattr(client, "name", "")}
                     matches = [row for row in self.queue
-                               if row.state == "grabbed" and row.release.casefold() == name.casefold()
-                               and (not row.download_client or row.download_client == getattr(client, "name", ""))]
+                               if matches_job(row.download_job_id, row.download_client, row.release, report)]
+                    identified = [row for row in matches if row.download_job_id]
+                    # A report owned by a finished identified attempt must not
+                    # get reassigned to an unrelated legacy same-title row.
+                    matches = [row for row in (identified or matches) if row.state == "grabbed"]
                     # Legacy rows have no client id; never guess between duplicates.
                     if len(matches) != 1:
                         continue
@@ -4317,7 +4324,9 @@ class ROMarr:
                     row.release_fault = False
                     row.review_required = True
                     row.download_client = getattr(client, "name", "Download client")
-                    row.detail = "Download client reports failure. Review client history before retrying; no replacement was requested."
+                    from .download_failures import DETAILS
+                    row.detail = DETAILS.get(report.get("failure_code"),
+                        "Download client reports failure. Review client history before retrying; no replacement was requested.")
                     self.store.record(Event(kind="failed", game=row.game, platform=row.platform,
                                             release=row.release, indexer=row.indexer, detail=row.detail))
                     if row.external_request_id:
@@ -4352,7 +4361,10 @@ class ROMarr:
             if not getattr(client, "configured", True):
                 continue
             try:
-                finished.extend(client.completed())
+                from .download_identity import safe_job_id
+                finished.extend({**row, "client": getattr(client, "name", ""),
+                                 "job_id": safe_job_id(row.get("job_id") or row.get("hash"))}
+                                for row in client.completed())
             except Exception as err:
                 # One unreachable client must not stop the others importing.
                 log.warning("%s completed() failed: %s", getattr(client, "name", client), err)
@@ -4368,14 +4380,16 @@ class ROMarr:
             platform = None
             queue_item = None
             with self._lock:
-                for item in self.queue:
-                    if item.release == name:
-                        if item.state in ("imported", "import-failed"):
-                            queue_item = item
-                            break
-                        platform = resolve(item.platform)
-                        queue_item = item
-                        break
+                from .download_identity import matches_job
+                matches = [item for item in self.queue
+                           if matches_job(item.download_job_id, item.download_client, item.release, torrent)]
+                # Prefer exact identities over legacy title-only records, then
+                # require uniqueness. Never import a duplicate title by guesswork.
+                identified = [item for item in matches if item.download_job_id]
+                matches = identified or matches
+                if len(matches) == 1:
+                    queue_item = matches[0]
+                    platform = resolve(queue_item.platform)
             if queue_item is not None and queue_item.state in ("imported", "import-failed"):
                 continue
             if platform is None:

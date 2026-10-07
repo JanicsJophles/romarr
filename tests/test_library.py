@@ -372,6 +372,7 @@ def test_a_usenet_release_goes_to_the_usenet_client(monkeypatch, tmp_path):
     weight: results scored fine and were then refused."""
     from romarr.app import ROMarr
     from romarr.selection import Release
+    from romarr.download_identity import HandoffReceipt
 
     svc = ROMarr(env={
         "QBITTORRENT_URL": "http://qbit:8090",
@@ -386,7 +387,10 @@ def test_a_usenet_release_goes_to_the_usenet_client(monkeypatch, tmp_path):
     to_sab, to_qbit = [], []
     for c in svc.clients:
         sink = to_sab if c.protocol == "usenet" else to_qbit
-        monkeypatch.setattr(c, "add", lambda url, _s=sink, **k: _s.append(url) or True)
+        if callable(getattr(c, "add_receipt", None)):
+            monkeypatch.setattr(c, "add_receipt", lambda url, _s=sink, **k: (_s.append(url), HandoffReceipt(True, "fixture-job"))[1])
+        else:
+            monkeypatch.setattr(c, "add", lambda url, _s=sink, **k: _s.append(url) or True)
 
     out = svc.request("Chrono Trigger", "snes")
     assert out["ok"], out

@@ -100,3 +100,22 @@ def test_active_download_is_not_duplicated_by_scheduled_search(tmp_path):
     svc.store.want(row.game,row.platform);svc.request=Mock()
     assert svc.search_missing(auto=True)['searched']==0
     svc.request.assert_not_called()
+
+
+@pytest.mark.parametrize(('message', 'expected'), [
+    ('Aborted, cannot be completed - https://private.invalid?apikey=secret', 'provider could not supply'),
+    ('No space left on device: /private/client/folder', 'insufficient disk space'),
+    ('Repair failed: private-server', 'could not repair'),
+    ('Password required: secret-name', 'needs a password'),
+    ('Unpack failed: secret-path', 'could not unpack'),
+])
+def test_known_failure_reason_is_actionable_without_raw_provider_text(tmp_path, message, expected):
+    svc = service(tmp_path)
+    row = queued(svc)
+    svc.clients = [client({'history': {'slots': [
+        {'name': row.release, 'status': 'Failed', 'cat': 'romarr', 'fail_message': message}
+    ]}})]
+    assert svc.reconcile_client_failures() == 1
+    assert expected in row.detail
+    assert 'private' not in row.detail and 'secret' not in row.detail
+    assert not row.release_fault and row.review_required

@@ -97,17 +97,23 @@ class SABnzbd:
         return bool(out and out.get("version"))
 
     def add(self, url: str, *, name: str = "") -> bool:
-        """Hand SABnzbd an NZB URL to fetch and queue."""
+        return self.add_receipt(url, name=name).accepted
+
+    def add_receipt(self, url: str, *, name: str = ""):
+        """Submit once and retain SABnzbd's returned job identity."""
+        from .download_identity import HandoffReceipt, safe_job_id
         if not self.configured:
-            return False
+            return HandoffReceipt(False)
         params = {"name": url, "cat": self._config.category}
         if name:
             params["nzbname"] = name
         out = self._call("addurl", **params)
         if not out or not out.get("status"):
             log.warning("sabnzbd rejected the nzb")
-            return False
-        return True
+            return HandoffReceipt(False)
+        ids = out.get("nzo_ids", [])
+        job_id = safe_job_id(ids[0]) if isinstance(ids, list) and len(ids) == 1 else ""
+        return HandoffReceipt(True, job_id)
 
     def failed(self) -> list[dict]:
         """Explicit failed history only; unreachable history is not a failed release."""
@@ -125,12 +131,17 @@ class SABnzbd:
             name = slot.get("name")
             if not isinstance(name, str) or not name:
                 continue
+            from .download_identity import safe_job_id
+            from .download_failures import sab_failure_code
             rows.append({"name": name, "state": "failed", "client": self.name,
+                         "job_id": safe_job_id(slot.get("nzo_id")),
+                         "failure_code": sab_failure_code(slot.get("fail_message")),
                          "detail": "SABnzbd reports a failed download. Review its history before retrying."})
         return rows
 
     def completed(self) -> list[dict]:
         """Finished items in our category, shaped like qBittorrent's."""
+        from .download_identity import safe_job_id
         if not self.configured:
             return []
         out = self._call("history", limit=100, category=self._config.category)
@@ -138,6 +149,7 @@ class SABnzbd:
         return [
             {
                 "name": s.get("name", ""),
+                "job_id": safe_job_id(s.get("nzo_id")),
                 "content_path": s.get("storage") or "",
                 "save_path": s.get("storage") or "",
                 "state": s.get("status", ""),
@@ -3051,6 +3063,16 @@ def _stream_to(response, target: Path, url: str) -> Path:
     destination = target / _filename_for(response, url)
     with response:
         return _atomic_download_body(response, destination)
+
+
+def hand_off_receipt(client, url: str, *, name: str = ""):
+    """Opt-in receipts keep older/plugin clients' boolean add contract intact."""
+    from .download_identity import HandoffReceipt
+    if callable(getattr(type(client), "add_receipt", None)):
+        if name and getattr(client, "TAKES_NAME", False):
+            return client.add_receipt(url, name=name)
+        return client.add_receipt(url)
+    return HandoffReceipt(bool(hand_off(client, url, name=name)))
 
 
 def hand_off(client, url: str, *, name: str = "") -> bool:

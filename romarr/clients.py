@@ -175,6 +175,11 @@ class QBittorrent:
             return False
         return True
 
+    def add_receipt(self, magnet_or_url: str, *, save_path: str | None = None):
+        from .download_identity import HandoffReceipt, magnet_job_id
+        accepted = self.add(magnet_or_url, save_path=save_path)
+        return HandoffReceipt(accepted, magnet_job_id(magnet_or_url) if accepted else "")
+
     def reachable(self) -> bool:
         """Whether the download client answers at all.
 

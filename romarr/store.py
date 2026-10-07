@@ -137,6 +137,8 @@ class QueueItem:
     # A request can be satisfied from any one row, so the list is not
     # necessarily 1:1 with game files; an import-failed row leaves it empty.
     imported_paths: list[str] = field(default_factory=list)
+    # SAB nzo_id / qBittorrent infohash. Never a URL or API key.
+    download_job_id: str = ""
 
 
 @dataclass
