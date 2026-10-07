@@ -750,7 +750,7 @@ function clientWarningsHtml(warnings){
  return `<div class="panel-note"><strong>Download client needs attention</strong><p>These are downloader-wide observations, separate from each request's search or import result.</p><ul>${rows.map(w=>`<li><b>${esc(w.client)}</b>: ${esc(w.detail)}</li>`).join('')}</ul><a href="#clients">Review download clients</a></div>`;
 }
 function indexerSeedLabel(release){
- if(release.protocol==='usenet')return 'Not applicable (Usenet)';
+ if(release.protocol==='usenet'||release.download_client==='SABnzbd'||release.download_client==='NZBGet')return 'Not applicable (Usenet)';
  return typeof release.seeders==='number'&&Number.isFinite(release.seeders)&&release.seeders>=0
   ? `${release.seeders} reported by indexer` : 'Not reported by indexer';
 }
@@ -760,7 +760,7 @@ function requestTransferStats(row){
  if(number(row.connected_seeds))stats.push(`${row.connected_seeds} connected seeds`);
  if(number(row.connected_leechers))stats.push(`${row.connected_leechers} connected leechers`);
  if(number(row.peers))stats.push(`${row.peers} connected peers total`);
- if(number(row.indexer_seeders))stats.push(`${row.indexer_seeders} seeds reported by indexer (not live)`);
+ if(row.client!=='SABnzbd'&&row.client!=='NZBGet'&&number(row.indexer_seeders))stats.push(`${row.indexer_seeders} seeds reported by indexer (not live)`);
  if(number(row.size)&&row.size>0)stats.push(`${number(row.downloaded)?(row.downloaded/1048576).toFixed(0)+' / ':''}${(row.size/1048576).toFixed(0)} MB`);
  else if(number(row.downloaded))stats.push(row.downloaded===0?'No game data downloaded':`${(row.downloaded/1048576).toFixed(1)} MB downloaded`);
  if(number(row.eta_seconds)&&row.eta_seconds>0)stats.push(`${Math.ceil(row.eta_seconds/60)} min remaining`);
