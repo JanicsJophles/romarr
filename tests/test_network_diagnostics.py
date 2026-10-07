@@ -9,7 +9,7 @@ def test_tracker_evidence_is_sanitized_and_ignores_dht():
         {"url": "https://private.example/secret", "status": 4, "msg": "Host not found secret"},
         {"url": "udp://tracker.example", "status": 2, "msg": ""},
     ])
-    assert result == {"trackers_checked": 2, "trackers_failed": 1, "tracker_dns_errors": 1}
+    assert result == {"trackers_checked": 2, "trackers_working": 1, "trackers_failed": 1, "tracker_dns_errors": 1}
 
 
 class Client:
@@ -41,8 +41,10 @@ def test_read_only_probe_is_bounded_and_reports_dns_not_vpn_certainty():
 
 def test_actual_transfer_is_positive_evidence():
     client = Client(speed=100)
-    assert inspect_qbit(client)["status"] == "transferring"
-    assert len(client.calls) == 1
+    result = inspect_qbit(client)
+    assert result["status"] == "dns-errors"
+    assert "receiving data for at least one job" in result["detail"]
+    assert len(client.calls) == 4
 
 
 def test_failure_does_not_leak_private_exception():
@@ -68,4 +70,31 @@ def test_snapshot_explains_dns_failure_on_waiting_metadata(monkeypatch):
     result = download_status.snapshot(SimpleNamespace(clients=[QBittorrent()]))
     assert result['rows'][0]['status'] == 'metadata'
     assert result['rows'][0]['network_status'] == 'dns-errors'
-    assert 'DNS failures' in result['rows'][0]['detail']
+    assert 'DNS failures' not in result['rows'][0]['detail']
+    assert 'DNS failures' in result['client_warnings'][0]['detail']
+
+
+def test_working_trackers_and_peers_do_not_imply_global_network_outage():
+    class Mixed(Client):
+        def _get(self, path, **kwargs):
+            assert path == 'torrents/trackers'
+            data = [
+                {'url': 'udp://working.example', 'status': 2},
+                {'url': 'udp://broken.example', 'status': 4, 'msg': 'Host not found'},
+            ]
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: data)
+    result = inspect_qbit(Mixed(), [{'hash': 'a'*40, 'progress': 0, 'num_seeds': 0, 'num_leechs': 3}])
+    assert result['status'] == 'dns-errors'  # compatible machine-readable status
+    assert result['trackers_working'] == 1
+    assert result['connected_peers'] == 3
+    assert 'working' in result['detail'] and '3 peer connections' in result['detail']
+    assert 'do not establish a VPN outage' in result['detail']
+    assert 'broken.example' not in str(result)
+
+
+def test_transfer_without_tracker_errors_is_positive_evidence():
+    class Working(Client):
+        def _get(self, path, **kwargs):
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: [])
+    result=inspect_qbit(Working(), [{'hash':'a'*40,'progress':0.2,'dlspeed':1024}])
+    assert result['status']=='transferring'

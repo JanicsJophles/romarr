@@ -4,6 +4,24 @@ The Requests page combines durable request/queue records with read-only client t
 
 The current telemetry adapters support qBittorrent and SABnzbd. Other configured client types retain their normal import behavior but may have less detailed progress reporting. Client timeouts or missing matches display status unavailable rather than asserting a failed release or successful transfer.
 
+Add New saves a durable request before searching. Repeated submissions return the
+existing request; use its status page and explicit release search for recovery.
+Interactive Search says **Sent to client** when a handoff succeeds. That is not
+confirmation of metadata, downloaded bytes, or a completed library import.
+
+Indexer seed reports are estimates from search results, separate from the live
+`connected_seeds` and `connected_leechers` counts. Unknown connection counts are
+null. A connected leecher may have neither metadata nor the pieces you need.
+Mixed tracker diagnostics show working trackers and connected peers alongside
+individual errors; an isolated tracker DNS failure does not establish a VPN
+outage and is not attached to every request as its failure reason.
+
+Switch NSP/XCI format labels and filename extensions receive equivalent format
+evidence when ranking candidates. This lets availability estimates distinguish
+otherwise comparable releases without favoring punctuation in a filename.
+Existing wrong-platform, package-content, and public zero-seed checks still
+apply. Ranking cannot guarantee that an advertised seed is reachable.
+
 SABnzbd's explicit Failed history is reconciled into durable queue/history state during scheduled import polls and Requests refreshes. Release identity, indexer and client label are retained; raw failure messages and nested source URLs are not sent to the browser. Imported rows cannot be downgraded by old failure history. Ambiguous legacy rows sharing a release title are not guessed.
 
 A client-reported failure or refused handoff requires review before automatic searches can retry it. That hold persists across restart. The scheduler and RSS matching skip held requests and existing active downloads. Use the explicit manual search/request flow after checking the client; no replacement is started merely because you viewed status.

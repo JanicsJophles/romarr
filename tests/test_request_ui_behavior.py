@@ -38,6 +38,12 @@ assert.deepEqual(JSON.parse(sent.options.body),{game:'A game',platform:'n3ds'});
 assert.equal(saved.request.status,'searching');
 global.fetch=async()=>({ok:true,json:async()=>({})});
 await assert.rejects(saveGameRequest('A game','n3ds'),/Check Your requests/);
+for(const body of [null,{request:{}},{request:{status:null}},{request:{status:''}}]){
+ global.fetch=async()=>({ok:true,json:async()=>body});
+ await assert.rejects(saveGameRequest('A game','n3ds'),/Check Your requests/);
+}
+global.fetch=async()=>({ok:true,json:async()=>({duplicate:true,request:{status:'metadata'}})});
+assert.equal((await saveGameRequest('A game','n3ds')).duplicate,true);
 global.fetch=async()=>{throw Object.assign(new Error(),{name:'AbortError'})};
 await assert.rejects(saveGameRequest('A game','n3ds'),/may already be saved/);
 ''')
@@ -92,3 +98,51 @@ def test_client_warning_banner_is_separate_escaped_and_optional():
     assert.match(html,/href="#clients"/);
     assert.equal(clientWarningsHtml([]),'');
     """)
+
+
+def test_availability_distinguishes_indexer_reports_from_connected_sources():
+    run_js('''
+assert.equal(indexerSeedLabel({seeders:0}), '0 reported by indexer');
+assert.equal(indexerSeedLabel({seeders:63}), '63 reported by indexer');
+for(const seeders of [null,undefined,-1,Infinity,'63'])assert.equal(indexerSeedLabel({seeders}),'Not reported by indexer');
+assert.equal(indexerSeedLabel({protocol:'usenet',seeders:0}),'Not applicable (Usenet)');
+const stats=requestTransferStats({speed:0,peers:2,connected_seeds:0,connected_leechers:2,downloaded:0,size:0});
+assert.deepEqual(stats,['0.00 MB/s','0 connected seeds','2 connected leechers','2 connected peers total','No game data downloaded']);
+assert.deepEqual(requestTransferStats({connected_seeds:null,connected_leechers:-1,peers:'2',size:NaN,indexer_seeders:null}),[]);
+assert.deepEqual(requestTransferStats({connected_seeds:0,indexer_seeders:63}),['0 connected seeds','63 seeds reported by indexer (not live)']);
+assert.deepEqual(requestTransferStats({indexer_seeders:0}),['0 seeds reported by indexer (not live)']);
+assert.match(requestAvailabilityNote({status:'metadata',client:'qBittorrent'}),/Connected peers may not have/);
+assert.match(requestAvailabilityNote({status:'grabbed'}),/not that game data is downloading/);
+assert.equal(requestAvailabilityNote({status:'imported'}),'');
+assert.equal(requestAvailabilityNote({status:'metadata',client:'SABnzbd'}),'');
+assert.equal(requestAvailabilityNote({status:'stalled'}),'');
+''')
+
+
+def test_add_page_saves_once_and_does_not_overwrite_a_new_page():
+    if not shutil.which('node'):
+        pytest.skip('Node is needed for browser request behavior checks')
+    start = JS.index('RENDER.add=async()=>{')
+    end = JS.index('RENDER.search=async()=>{', start)
+    script = '''const assert=require('node:assert/strict');
+const RENDER={},PLATFORMS=[],REQUEST_LABEL={searching:'Searching…'};
+const esc=s=>String(s),toast=()=>{},refreshCounts=()=>{};
+const elements={'#page':{},'#g-name':{value:'A game'},'#g-plat':{value:'nds'},'#g-go':{},'#g-out':{}};
+const $=s=>elements[s];let calls=0,resolve;
+const saveGameRequest=()=>{calls++;return new Promise(r=>resolve=r)};
+''' + JS[start:end] + '''
+(async()=>{
+ await RENDER.add();const click=elements['#g-go'].onclick;
+ const pending=click();await click();assert.equal(calls,1);
+ resolve({request:{status:'searching'}});await pending;
+ assert.match(elements['#g-out'].innerHTML,/Request saved/);
+ assert.match(elements['#g-out'].innerHTML,/href="#requests"/);
+ assert.equal(elements['#g-go'].disabled,false);
+ const duplicate=click();resolve({duplicate:true,request:{status:'searching'}});await duplicate;
+ assert.match(elements['#g-out'].innerHTML,/Already requested/);
+ const old=elements['#g-out'];const next=click();
+ elements['#g-out']={innerHTML:'New page'};
+ resolve({request:{status:'searching'}});await next;
+ assert.equal(elements['#g-out'].innerHTML,'New page');
+})().catch(e=>{console.error(e);process.exit(1)});'''
+    subprocess.run(['node', '-e', script], check=True, capture_output=True, text=True)
