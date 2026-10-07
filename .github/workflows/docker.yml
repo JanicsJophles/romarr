@@ -1,0 +1,81 @@
+name: Container checks
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    if: github.repository == 'JanicsJophles/romarr'
+    runs-on: [self-hosted, Linux, X64, atlas, romarr]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build isolated image
+        run: docker build -t romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }} .
+      - name: Verify disabled plugin boundary
+        run: docker run --rm --network none --entrypoint python romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }} -c "from romarr import hub; assert not hub.available(); assert not hub.install('example')['ok']"
+      - name: Verify mounted media permissions remain unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=$(mktemp -d)
+          trap 'docker rm -f "romarr-smoke-${{ github.run_id }}-${{ github.run_attempt }}" >/dev/null 2>&1 || true; rm -rf "$root"' EXIT
+          mkdir -p "$root/config" "$root/roms" "$root/downloads"
+          chmod 777 "$root/config" "$root/roms" "$root/downloads"
+          touch "$root/downloads/existing"
+          chmod 640 "$root/downloads/existing"
+          before=$(stat -c '%u:%g:%a' "$root/downloads/existing")
+          docker run -d --name "romarr-smoke-${{ github.run_id }}-${{ github.run_attempt }}" --network none \
+            -e PUID="$(id -u)" -e PGID="$(id -g)" -e UMASK=002 \
+            -v "$root/config:/config" -v "$root/roms:/roms" -v "$root/downloads:/downloads" \
+            romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }}
+          ready=false
+          for attempt in $(seq 1 30); do
+            if docker exec "romarr-smoke-${{ github.run_id }}-${{ github.run_attempt }}" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6868/api/health',timeout=2)"; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          after=$(stat -c '%u:%g:%a' "$root/downloads/existing")
+          test "$after" = "$before"
+          docker exec "romarr-smoke-${{ github.run_id }}-${{ github.run_attempt }}" python -c "from pathlib import Path; s=Path('/proc/1/status').read_text(); assert 'Umask:\t0002' in s, 'server process did not inherit UMASK=002'"
+      - name: Verify synthetic request, download, import and restart
+        shell: bash
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --entrypoint python -e PYTHONPATH=/app \
+            -v "$PWD/scripts/stage_companion.py:/tmp/stage_companion.py:ro" \
+            romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }} /tmp/stage_companion.py
+      - name: Scan runtime image with pinned Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scan_dir=$(mktemp -d "$RUNNER_TEMP/romarr-scan.XXXXXX")
+          trap 'rm -rf "$scan_dir"' EXIT
+          curl --fail --silent --show-error --location \
+            https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz \
+            -o "$scan_dir/trivy.tar.gz"
+          printf '%s  %s\n' c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f "$scan_dir/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$scan_dir/trivy.tar.gz" -C "$scan_dir" trivy
+          "$scan_dir/trivy" image --scanners vuln,secret --format json \
+            --output "$scan_dir/report.json" romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }}
+          # Print counts only: secret matches must never enter public job logs.
+          python3 - "$scan_dir/report.json" <<'PYSCAN'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          findings = report.get("Results", [])
+          vulnerabilities = sum(len(x.get("Vulnerabilities", [])) for x in findings)
+          secrets = sum(len(x.get("Secrets", [])) for x in findings)
+          print(f"Image scan: {vulnerabilities} vulnerabilities, {secrets} secrets")
+          if vulnerabilities or secrets:
+              raise SystemExit("Image scan failed. Investigate privately; do not publish this image.")
+          PYSCAN
+      - name: Clean up this run's image and container
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f romarr-smoke-${{ github.run_id }}-${{ github.run_attempt }} >/dev/null 2>&1 || true
+          docker image rm -f romarr-companion-test:${{ github.run_id }}-${{ github.run_attempt }} >/dev/null 2>&1 || true

@@ -1,0 +1,13 @@
+name: Feature request
+description: Describe a user problem and the proposed behavior.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: How should we verify it works?

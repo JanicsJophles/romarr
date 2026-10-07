@@ -1,0 +1,517 @@
+{
+  "generated_by": "Trivy 0.75.0 license scanner",
+  "notice": "Scanner detections, not a legal opinion or a statement that every component uses the project MIT license. Confidence and source files are retained for review.",
+  "entries": [
+    {
+      "target": "OS Packages",
+      "package": "acl-libs",
+      "license": "LGPL-2.1-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "acl-libs",
+      "license": "GPL-2.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "alpine-baselayout",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "alpine-baselayout-data",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "alpine-keys",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "alpine-release",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "apk-tools",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "busybox",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "busybox-binsh",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ca-certificates",
+      "license": "MPL-2.0",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ca-certificates",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ca-certificates-bundle",
+      "license": "MPL-2.0",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ca-certificates-bundle",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "gdbm",
+      "license": "GPL-3.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libapk",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libarchive-tools",
+      "license": "BSD-2-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libarchive-tools",
+      "license": "BSD-3-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libarchive-tools",
+      "license": "Public-Domain",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libbz2",
+      "license": "bzip-2-1.0.6",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libcrypto3",
+      "license": "Apache-2.0",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libexpat",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libffi",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libncursesw",
+      "license": "X-11",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libpanelw",
+      "license": "X-11",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libssl3",
+      "license": "Apache-2.0",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "libuuid",
+      "license": "BSD-3-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "lz4-libs",
+      "license": "BSD-2-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "lz4-libs",
+      "license": "GPL-2.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "musl",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "musl-utils",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "musl-utils",
+      "license": "BSD-2-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "musl-utils",
+      "license": "GPL-2.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ncurses-terminfo-base",
+      "license": "X-11",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "readline",
+      "license": "GPL-3.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "scanelf",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "sqlite-libs",
+      "license": "blessing",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "ssl_client",
+      "license": "GPL-2.0-only",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "su-exec",
+      "license": "MIT",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "tzdata",
+      "license": "Public-Domain",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "xz-libs",
+      "license": "GPL-2.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "xz-libs",
+      "license": "0BSD",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "xz-libs",
+      "license": "Public-Domain",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "xz-libs",
+      "license": "LGPL-2.1-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "zlib",
+      "license": "Zlib",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "zstd-libs",
+      "license": "BSD-3-Clause",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "OS Packages",
+      "package": "zstd-libs",
+      "license": "GPL-2.0-or-later",
+      "file": "",
+      "confidence": 1
+    },
+    {
+      "target": "Python",
+      "package": "certifi",
+      "license": "MPL-2.0",
+      "file": "usr/local/lib/python3.13/site-packages/certifi-2026.7.22.dist-info/METADATA",
+      "confidence": 1
+    },
+    {
+      "target": "Python",
+      "package": "charset-normalizer",
+      "license": "MIT",
+      "file": "usr/local/lib/python3.13/site-packages/charset_normalizer-3.5.2.dist-info/METADATA",
+      "confidence": 1
+    },
+    {
+      "target": "Python",
+      "package": "idna",
+      "license": "BSD-3-Clause",
+      "file": "usr/local/lib/python3.13/site-packages/idna-3.20.dist-info/METADATA",
+      "confidence": 1
+    },
+    {
+      "target": "Python",
+      "package": "requests",
+      "license": "Apache-2.0",
+      "file": "usr/local/lib/python3.13/site-packages/requests-2.34.2.dist-info/METADATA",
+      "confidence": 1
+    },
+    {
+      "target": "Python",
+      "package": "urllib3",
+      "license": "MIT",
+      "file": "usr/local/lib/python3.13/site-packages/urllib3-2.8.0.dist-info/METADATA",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Apache-2.0",
+      "file": "usr/local/lib/python3.13/profile.py",
+      "confidence": 0.9285714285714286
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Apache-2.0",
+      "file": "usr/local/lib/python3.13/pstats.py",
+      "confidence": 0.9285714285714286
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "MPL-2.0",
+      "file": "usr/local/lib/python3.13/site-packages/certifi-2026.7.22.dist-info/licenses/LICENSE",
+      "confidence": 0.9696969696969697
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "MIT",
+      "file": "app/LICENSE",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "BSD-0-Clause",
+      "file": "usr/local/lib/python3.13/LICENSE.txt",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "BeOpen",
+      "file": "usr/local/lib/python3.13/LICENSE.txt",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "CNRI-Python-GPL-Compatible",
+      "file": "usr/local/lib/python3.13/LICENSE.txt",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Python-2.0",
+      "file": "usr/local/lib/python3.13/LICENSE.txt",
+      "confidence": 0.9970501474926253
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "BSD-3-Clause",
+      "file": "usr/local/lib/python3.13/optparse.py",
+      "confidence": 0.9812206572769953
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "MIT",
+      "file": "usr/local/lib/python3.13/site-packages/charset_normalizer-3.5.2.dist-info/licenses/LICENSE",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "BSD-3-Clause",
+      "file": "usr/local/lib/python3.13/site-packages/idna-3.20.dist-info/licenses/LICENSE.md",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Apache-2.0",
+      "file": "usr/local/lib/python3.13/site-packages/requests-2.34.2.dist-info/licenses/LICENSE",
+      "confidence": 0.9964362081254454
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "MIT",
+      "file": "usr/local/lib/python3.13/site-packages/urllib3-2.8.0.dist-info/licenses/LICENSE.txt",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Zlib",
+      "file": "usr/local/lib/python3.13/sqlite3/__init__.py",
+      "confidence": 0.9847328244274809
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Zlib",
+      "file": "usr/local/lib/python3.13/sqlite3/dbapi2.py",
+      "confidence": 0.9847328244274809
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "MIT",
+      "file": "usr/local/lib/python3.13/tarfile.py",
+      "confidence": 1
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "Zlib",
+      "file": "usr/local/lib/python3.13/turtle.py",
+      "confidence": 0.9847328244274809
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "PIL",
+      "file": "usr/local/lib/python3.13/xml/etree/ElementInclude.py",
+      "confidence": 0.9623655913978495
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "PIL",
+      "file": "usr/local/lib/python3.13/xml/etree/ElementPath.py",
+      "confidence": 0.9623655913978495
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "PIL",
+      "file": "usr/local/lib/python3.13/xml/etree/ElementTree.py",
+      "confidence": 0.9623655913978495
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "PIL",
+      "file": "usr/local/lib/python3.13/xml/etree/__init__.py",
+      "confidence": 0.9623655913978495
+    },
+    {
+      "target": "Loose File License(s)",
+      "package": "",
+      "license": "PIL",
+      "file": "usr/local/lib/python3.13/xmlrpc/client.py",
+      "confidence": 0.9623655913978495
+    }
+  ]
+}

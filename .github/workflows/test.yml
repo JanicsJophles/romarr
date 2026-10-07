@@ -1,0 +1,25 @@
+name: Tests
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python:
+    if: github.repository == 'JanicsJophles/romarr'
+    runs-on: [self-hosted, Linux, X64, atlas, romarr]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test in an isolated Python environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_env=$(mktemp -d "$RUNNER_TEMP/romarr-python.XXXXXX")
+          trap 'rm -rf "$test_env"' EXIT
+          python3 -m venv "$test_env"
+          "$test_env/bin/python" -m pip install -r requirements-dev.txt
+          "$test_env/bin/python" -m pytest
