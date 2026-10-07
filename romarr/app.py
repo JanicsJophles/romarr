@@ -4712,8 +4712,8 @@ def make_handler(service: ROMarr):
 
             # --- *arr-shaped API ---------------------------------------
             if route.path == "/api/v1/game-requests":
-                from .request_state import all_status
-                return self._json(200, {"items": all_status(service)})
+                from .request_state import status_payload
+                return self._json(200, status_payload(service))
             if route.path == "/api/v1/game":
                 # Served from the background cache. Calling RomM here meant the
                 # page waited behind whatever else was querying that table.

@@ -1,7 +1,7 @@
 """Read-only client telemetry. Never send client URLs or credentials to browsers."""
 import threading,time,math
 from .download_identity import safe_job_id, matches_job
-LOCK=threading.Lock();CACHE={'at':0,'rows':[],'errors':[],'service':None}
+LOCK=threading.Lock();CACHE={'at':0,'rows':[],'errors':[],'client_warnings':[],'service':None}
 def number(value,default=0):
  try:
   result=float(value)
@@ -24,7 +24,7 @@ def sab_row(x,history=False):
 def snapshot(service):
  with LOCK:
   if CACHE.get('service') is service and time.monotonic()-CACHE['at']<8:return CACHE.copy()
-  rows=[];errors=[]
+  rows=[];errors=[];warnings=[]
   for c in service.clients:
    if not getattr(c,'configured',True):continue
    try:
@@ -32,6 +32,8 @@ def snapshot(service):
      r=c._get('torrents/info',params={'category':c._config.category},timeout=5);r.raise_for_status();jobs=r.json()
      from .network_diagnostics import inspect_qbit
      network=inspect_qbit(c,jobs)
+     if network['status'] in ('dns-errors','tracker-errors'):
+      warnings.append({'client':'qBittorrent','status':network['status'],'detail':network['detail']})
      for job in jobs:
       row=qbit_row(job)
       row['network_status']=network['status'];row['network_detail']=network['detail']
@@ -44,17 +46,20 @@ def snapshot(service):
       if d is None:raise RuntimeError('Unavailable')
       for x in d.get(mode,{}).get('slots',[]):
        if x.get('cat',x.get('category',c._config.category))==c._config.category:rows.append(sab_row(x,mode=='history'))
-   except Exception:errors.append(getattr(c,'name','Download client')+' unavailable')
-  CACHE.update(at=time.monotonic(),rows=rows,errors=errors,service=service)
+   except Exception:
+    label={'QBittorrent':'qBittorrent','SABnzbd':'SABnzbd'}.get(c.__class__.__name__,'Download client')
+    errors.append(label+' unavailable')
+    warnings.append({'client':label,'status':'unavailable','detail':'Could not read this download client. Check its connection and settings; saved request outcomes have not changed.'})
+  CACHE.update(at=time.monotonic(),rows=rows,errors=errors,client_warnings=warnings,service=service)
   return CACHE.copy()
-def enrich(service,rows):
+def enrich(service,rows,live=None):
  """Overlay unambiguous live telemetry without erasing durable outcomes.
 
  A completed client download is not a successful library import. Likewise,
  history for a previous attempt must not revive a failed request. Client names
  narrow title matching; duplicate titles remain unknown until we track job IDs.
  """
- live=snapshot(service)
+ if live is None:live=snapshot(service)
  for row in rows:
   row['checked_at']=time.time()
   if row['status'] in ('imported','searching'):continue

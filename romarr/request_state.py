@@ -59,8 +59,13 @@ def submit(service,body):
    raise ValueError('Could not start the search. Review Queue before retrying.')
   return {'accepted':True,'request':dict(row)}
 
-def all_status(service):
+def status_payload(service):
  reconcile=getattr(service,"reconcile_client_failures",None)
  if callable(reconcile):reconcile()
- from .download_status import enrich
- return enrich(service,base_status(service))
+ from .download_status import enrich,snapshot
+ live=snapshot(service)
+ return {'items':enrich(service,base_status(service),live=live),
+         'client_warnings':live.get('client_warnings',[])}
+
+def all_status(service):
+ return status_payload(service)['items']
