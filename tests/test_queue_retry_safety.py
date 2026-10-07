@@ -9,7 +9,7 @@ from romarr.app import ROMarr, QueueItem
 
 @pytest.fixture(autouse=True)
 def client_snapshot(monkeypatch):
-    monkeypatch.setattr("romarr.download_status.snapshot", lambda service: {
+    monkeypatch.setattr("romarr.download_status.snapshot", lambda service, **kwargs: {
         "rows": [{"release": "old release", "client": "SABnzbd", "job_id": "old-job", "status": "failed"}],
         "errors": [],
     })
@@ -111,7 +111,7 @@ def test_success_preserves_previous_job_ownership(tmp_path, monkeypatch):
 def test_failed_tracking_with_live_job_cannot_retry(tmp_path, monkeypatch, status):
     s = service(tmp_path)
     s.queue[0].download_job_id = "old-job"
-    monkeypatch.setattr("romarr.download_status.snapshot", lambda _: {
+    monkeypatch.setattr("romarr.download_status.snapshot", lambda _, **kwargs: {
         "rows": [{"client": "qBittorrent", "job_id": "old-job", "release": "renamed", "status": status}], "errors": []})
     monkeypatch.setattr(s, "request", lambda *a: pytest.fail("live job duplicated"))
     assert not s.queue_action(0, "retry")["ok"]
@@ -125,7 +125,7 @@ def test_failed_tracking_with_live_job_cannot_retry(tmp_path, monkeypatch, statu
 ])
 def test_unavailable_or_ambiguous_job_blocks_retry(tmp_path, monkeypatch, snapshot):
     s = service(tmp_path)
-    monkeypatch.setattr("romarr.download_status.snapshot", lambda _: snapshot)
+    monkeypatch.setattr("romarr.download_status.snapshot", lambda _, **kwargs: snapshot)
     monkeypatch.setattr(s, "request", lambda *a: pytest.fail("uncertain job duplicated"))
     assert not s.queue_action(0, "retry")["ok"]
 
@@ -141,7 +141,7 @@ def test_legacy_timeout_release_fault_still_checks_live_job(tmp_path, monkeypatc
     s = service(tmp_path)
     s.queue[0].release_fault = True
     s.queue[0].detail = "stalled: no import after 72 hours"
-    monkeypatch.setattr("romarr.download_status.snapshot", lambda _: {
+    monkeypatch.setattr("romarr.download_status.snapshot", lambda _, **kwargs: {
         "rows": [{"release": "old release", "status": "metadata"}], "errors": []})
     monkeypatch.setattr(s, "request", lambda *a: pytest.fail("legacy timeout duplicated"))
     assert not s.queue_action(0, "retry")["ok"]
@@ -153,10 +153,43 @@ def test_new_blank_failure_cannot_hide_old_live_torrent(tmp_path, monkeypatch):
     s.queue[0].detail = "stalled: no import after 72 hours"
     s.store.enqueue(QueueItem("Persona", "psp", "", 0, "failed", "no usable release"))
     calls = []
-    def snapshot(_):
+    def snapshot(_, **kwargs):
         calls.append(True)
         return {"rows": [{"release": "old release", "status": "metadata"}], "errors": []}
     monkeypatch.setattr("romarr.download_status.snapshot", snapshot)
     monkeypatch.setattr(s, "request", lambda *a: pytest.fail("old torrent duplicated"))
     assert not s.queue_action(1, "retry")["ok"]
     assert calls == [True]
+
+
+def test_retry_refreshes_cached_failure_before_resubmission(tmp_path, monkeypatch):
+    import time
+    from types import SimpleNamespace
+    from romarr import download_status
+
+    s = service(tmp_path)
+    # Undo the autouse telemetry fake for this integration of the cache gate
+    # and retry guard. All underlying client I/O remains synthetic.
+    monkeypatch.undo()
+    s.queue[0].download_job_id = "old-job"
+    s.queue[0].download_client = "SABnzbd"
+    calls = []
+    class SABnzbd:
+        configured = True
+        _config = SimpleNamespace(category="romarr")
+        def _call(self, mode, **kwargs):
+            calls.append(mode)
+            return {mode: {"slots": [] if mode == "history" else [
+                {"name": "old release", "nzo_id": "old-job", "status": "Downloading", "cat": "romarr"}
+            ]}}
+    s.clients = [SABnzbd()]
+    monkeypatch.setattr(download_status, "CACHE", {
+        "service": s, "at": time.monotonic(), "errors": [], "client_warnings": [],
+        "rows": [{"release": "old release", "client": "SABnzbd", "job_id": "old-job", "status": "failed"}],
+    })
+    assert download_status.snapshot(s)["rows"][0]["status"] == "failed"
+    assert calls == []
+    monkeypatch.setattr(s, "request", lambda *a: pytest.fail("resumed job duplicated"))
+    assert not s.queue_action(0, "retry")["ok"]
+    assert calls == ["history", "queue"]
+    assert download_status.snapshot(s)["rows"][0]["status"] == "downloading"

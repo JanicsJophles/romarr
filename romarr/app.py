@@ -1699,7 +1699,7 @@ class ROMarr:
                 from .download_status import snapshot
                 from .download_identity import matches_job
                 try:
-                    live = snapshot(self)
+                    live = snapshot(self, force=True)
                 except Exception:
                     return {"ok": False, "error": "cannot verify the existing download; inspect the client before retrying"}
                 for attempt in attempts:

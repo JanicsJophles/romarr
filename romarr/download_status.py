@@ -21,9 +21,9 @@ def sab_row(x,history=False):
  from .download_failures import DETAILS,sab_failure_code
  state=str(x.get('status',''));status={'Downloading':'downloading','Paused':'paused','Queued':'queued','Fetching':'metadata','Completed':'downloaded','Failed':'failed','Verifying':'verifying','Repairing':'repairing','Extracting':'extracting','Moving':'importing'}.get(state,'processing')
  return {'job_id':safe_job_id(x.get('nzo_id')),'release':x.get('name') or x.get('filename',''),'client':'SABnzbd','status':status,'detail':DETAILS.get(sab_failure_code(x.get('fail_message')),'SABnzbd reports failure. Review client history before retrying.') if state=='Failed' else state,'progress':100 if state=='Completed' else min(100,max(0,number(x.get('percentage')))),'timeleft':x.get('timeleft',''),'size':int(max(0,number(x.get('mb')))*1048576),'downloaded':int((max(0,number(x.get('mb')))-max(0,number(x.get('mbleft'))))*1048576)}
-def snapshot(service):
+def snapshot(service, *, force=False):
  with LOCK:
-  if CACHE.get('service') is service and time.monotonic()-CACHE['at']<8:return CACHE.copy()
+  if not force and CACHE.get('service') is service and time.monotonic()-CACHE['at']<8:return CACHE.copy()
   rows=[];errors=[];warnings=[]
   for c in service.clients:
    if not getattr(c,'configured',True):continue
