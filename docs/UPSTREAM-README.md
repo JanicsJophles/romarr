@@ -147,22 +147,16 @@ Intervals are editable live; zero disables a job.
 
 ### When a download dies
 
-A stalled torrent used to be a loop. The Blocklist existed, nothing ever
-added to it, and `best_release` is deterministic — so pulling the dead
-torrent out of your client and waiting for the next sweep scored the same
-results the same way and grabbed **the same dead file again**.
+This fork treats client connectivity and release quality separately. A
+network outage, missing metadata, refused handoff, or elapsed timer does
+not prove that the release is bad and does not trigger automatic blocking
+or a replacement download. Client-reported failures remain visible for
+review.
 
-Now a download the client refused, one that finished with no ROM in it, or
-one still unfinished past `stalled_timeout_minutes` (default three hours) is
-blocklisted **with the reason attached**, the game goes back on Wanted, and
-the next best release is grabbed in its place. Capped at three replacement
-grabs per sweep, because each one costs a full indexer search and twenty at
-once is how a tracker decides you are a scraper.
-
-What is deliberately *not* blocklisted: `no download client configured`.
-That failure is your install's, not the release's — and a blocklist full of
-good torrents blocked because a client was missing is worse than no
-blocklist at all.
+Verified content failures can still be blocklisted with a reason and
+replaced when failed-download handling is enabled, capped at three
+replacement grabs per sweep. See [request state and retry behavior](REQUEST-STATES.md)
+for current behavior and legacy-record handling.
 
 And a request you no longer want can now simply be dropped: **Remove** on
 any Wanted row, or `DELETE /api/v1/wanted/missing`. Until now the only way

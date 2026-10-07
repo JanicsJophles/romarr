@@ -255,17 +255,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Behaviour
     "auto_import": True,
     "rescan_after_import": True,
-    # Failed download handling, the same idea Radarr and Sonarr have: a
-    # release that could not be downloaded is not one to choose again. When
-    # on, a download that the client refused, that finished with no ROMs in
-    # it, or that stalled is added to the blocklist and the next best release
-    # is grabbed in its place. Without this the next missing/RSS sweep re-runs
-    # the same scorer over the same results and picks the same dead file.
+    # Only verified release/content failures qualify for automatic blocking
+    # and a replacement search. Network outages, refused handoffs, missing
+    # metadata and elapsed time require review without blaming the release.
     "blocklist_failed_downloads": True,
-    # How long a grabbed download may sit without finishing before it counts
-    # as stalled, in minutes. 0 disables stall detection entirely, leaving
-    # only outright failures to be retired. Generous by default: a large disc
-    # image on a thin swarm is slow, not dead.
+    # Retained for compatibility with older configurations. Elapsed time
+    # alone no longer marks a release failed or schedules a replacement.
     "stalled_timeout_minutes": 180,
     # The clock. Zero disables a job; the scheduler reads these live, so a
     # change applies at the next tick without a restart.

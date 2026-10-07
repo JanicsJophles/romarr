@@ -20,6 +20,7 @@ VERSION = "3.1.0"
 #: One line per route. Anything served and not described here fails the test,
 #: which is the whole mechanism keeping this honest.
 DESCRIPTIONS: dict[str, tuple[str, str]] = {
+    "/api/v1/blocklist/repair-timeouts": ("POST", "Preview explicitly selected legacy timeout blocks using release_ids. apply:true removes only matching timeout blocks, preserves operator/content blocks and does not retry downloads."),
     "/api/v1/game-chat": ("POST", "Optional game discovery chat. Accepts messages with user/assistant role and content; returns reply, verified games, and unverified count. Does not download or queue content."),
     "/api/v1/game-requests": ("GET", "Durable request status with read-only client telemetry. POST accepts game and platform and returns an idempotent accepted request. Existing requests are not redispatched."),
     "/": ("GET", "The web UI."),

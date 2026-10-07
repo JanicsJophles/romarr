@@ -1,7 +1,7 @@
 """Read-only client telemetry. Never send client URLs or credentials to browsers."""
 import threading,time,math
 from .download_identity import safe_job_id, matches_job
-LOCK=threading.Lock();CACHE={'at':0,'rows':[],'errors':[],'service':None}
+LOCK=threading.Lock();CACHE={'at':0,'rows':[],'errors':[],'client_warnings':[],'service':None}
 def number(value,default=0):
  try:
   result=float(value)
@@ -21,10 +21,10 @@ def sab_row(x,history=False):
  from .download_failures import DETAILS,sab_failure_code
  state=str(x.get('status',''));status={'Downloading':'downloading','Paused':'paused','Queued':'queued','Fetching':'metadata','Completed':'downloaded','Failed':'failed','Verifying':'verifying','Repairing':'repairing','Extracting':'extracting','Moving':'importing'}.get(state,'processing')
  return {'job_id':safe_job_id(x.get('nzo_id')),'release':x.get('name') or x.get('filename',''),'client':'SABnzbd','status':status,'detail':DETAILS.get(sab_failure_code(x.get('fail_message')),'SABnzbd reports failure. Review client history before retrying.') if state=='Failed' else state,'progress':100 if state=='Completed' else min(100,max(0,number(x.get('percentage')))),'timeleft':x.get('timeleft',''),'size':int(max(0,number(x.get('mb')))*1048576),'downloaded':int((max(0,number(x.get('mb')))-max(0,number(x.get('mbleft'))))*1048576)}
-def snapshot(service):
+def snapshot(service, *, force=False):
  with LOCK:
-  if CACHE.get('service') is service and time.monotonic()-CACHE['at']<8:return CACHE.copy()
-  rows=[];errors=[]
+  if not force and CACHE.get('service') is service and time.monotonic()-CACHE['at']<8:return CACHE.copy()
+  rows=[];errors=[];warnings=[]
   for c in service.clients:
    if not getattr(c,'configured',True):continue
    try:
@@ -32,6 +32,8 @@ def snapshot(service):
      r=c._get('torrents/info',params={'category':c._config.category},timeout=5);r.raise_for_status();jobs=r.json()
      from .network_diagnostics import inspect_qbit
      network=inspect_qbit(c,jobs)
+     if network['status'] in ('dns-errors','tracker-errors'):
+      warnings.append({'client':'qBittorrent','status':network['status'],'detail':network['detail']})
      for job in jobs:
       row=qbit_row(job)
       row['network_status']=network['status'];row['network_detail']=network['detail']
@@ -44,22 +46,41 @@ def snapshot(service):
       if d is None:raise RuntimeError('Unavailable')
       for x in d.get(mode,{}).get('slots',[]):
        if x.get('cat',x.get('category',c._config.category))==c._config.category:rows.append(sab_row(x,mode=='history'))
-   except Exception:errors.append(getattr(c,'name','Download client')+' unavailable')
-  CACHE.update(at=time.monotonic(),rows=rows,errors=errors,service=service)
+   except Exception:
+    label={'QBittorrent':'qBittorrent','SABnzbd':'SABnzbd'}.get(c.__class__.__name__,'Download client')
+    errors.append(label+' unavailable')
+    warnings.append({'client':label,'status':'unavailable','detail':'Could not read this download client. Check its connection and settings; saved request outcomes have not changed.'})
+  CACHE.update(at=time.monotonic(),rows=rows,errors=errors,client_warnings=warnings,service=service)
   return CACHE.copy()
-def enrich(service,rows):
+def enrich(service,rows,live=None):
  """Overlay unambiguous live telemetry without erasing durable outcomes.
 
  A completed client download is not a successful library import. Likewise,
  history for a previous attempt must not revive a failed request. Client names
  narrow title matching; duplicate titles remain unknown until we track job IDs.
  """
- live=snapshot(service)
+ if live is None:live=snapshot(service)
+ # A report belongs to one attempt, even if that attempt is no longer the
+ # latest projected request. Never lend an old known job to a title-only row.
+ claimed={(r.get('client',''),r.get('download_job_id','')) for r in rows if r.get('download_job_id')}
+ queue=getattr(service,'queue',None)
+ if isinstance(queue,(list,tuple)):
+  claimed.update((getattr(q,'download_client',''),getattr(q,'download_job_id',''))
+                 for q in queue if getattr(q,'download_job_id',''))
+ def available_to(row, report):
+  if row.get('download_job_id'):return True
+  job=report.get('job_id')
+  if job and any(job==owned and (not client or client==report.get('client')) for client,owned in claimed):return False
+  # Legacy matching must be unique in both directions, not just one report
+  # per row: two saved requests must not both claim a single download.
+  owners=[r for r in rows if not r.get('download_job_id') and
+          matches_job('',r.get('client',''),r.get('release',''),report)]
+  return len(owners)==1
  for row in rows:
   row['checked_at']=time.time()
   if row['status'] in ('imported','searching'):continue
   release=row.get('release','').casefold()
-  matches=[x for x in live['rows'] if matches_job(row.get('download_job_id',''),row.get('client',''),release,x)]
+  matches=[x for x in live['rows'] if matches_job(row.get('download_job_id',''),row.get('client',''),release,x) and available_to(row,x)]
   if len(matches)==1:
    match=matches[0]
    if row['status'] in ('failed','import-failed'):

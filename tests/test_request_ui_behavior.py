@@ -10,7 +10,7 @@ from romarr.ui import JS
 def run_js(body):
     if not shutil.which('node'):
         pytest.skip('Node is needed for browser request behavior checks')
-    start = JS.index('function requestPlatforms(')
+    start = JS.index('function clientWarningsHtml(')
     end = JS.index('\nRENDER.hub=', start)
     script = '''const assert=require('node:assert/strict');
 const PLATFORMS=[{name:'Nintendo Switch',slug:'switch'},{name:'Nintendo 3DS',slug:'n3ds'}];
@@ -78,3 +78,17 @@ assert.match(one.children[0].textContent,/Missing source data/);
 assert.equal(one.children[1].href,'#requests');
 await refreshRequestButtons();assert.equal(one.children.length,2);
 ''')
+
+
+def test_client_warning_banner_is_separate_escaped_and_optional():
+    run_js("""
+    global.esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    assert.equal(clientWarningsHtml(undefined),'');
+    assert.equal(clientWarningsHtml({}),'');
+    assert.equal(clientWarningsHtml([null,{}]),'');
+    const html=clientWarningsHtml([{client:'qBittorrent',detail:'DNS failures <private>'}]);
+    assert.match(html,/separate from each request/);
+    assert.match(html,/DNS failures &lt;private&gt;/);
+    assert.match(html,/href="#clients"/);
+    assert.equal(clientWarningsHtml([]),'');
+    """)
