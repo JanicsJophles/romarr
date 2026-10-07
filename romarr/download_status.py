@@ -60,11 +60,27 @@ def enrich(service,rows,live=None):
  narrow title matching; duplicate titles remain unknown until we track job IDs.
  """
  if live is None:live=snapshot(service)
+ # A report belongs to one attempt, even if that attempt is no longer the
+ # latest projected request. Never lend an old known job to a title-only row.
+ claimed={(r.get('client',''),r.get('download_job_id','')) for r in rows if r.get('download_job_id')}
+ queue=getattr(service,'queue',None)
+ if isinstance(queue,(list,tuple)):
+  claimed.update((getattr(q,'download_client',''),getattr(q,'download_job_id',''))
+                 for q in queue if getattr(q,'download_job_id',''))
+ def available_to(row, report):
+  if row.get('download_job_id'):return True
+  job=report.get('job_id')
+  if job and any(job==owned and (not client or client==report.get('client')) for client,owned in claimed):return False
+  # Legacy matching must be unique in both directions, not just one report
+  # per row: two saved requests must not both claim a single download.
+  owners=[r for r in rows if not r.get('download_job_id') and
+          matches_job('',r.get('client',''),r.get('release',''),report)]
+  return len(owners)==1
  for row in rows:
   row['checked_at']=time.time()
   if row['status'] in ('imported','searching'):continue
   release=row.get('release','').casefold()
-  matches=[x for x in live['rows'] if matches_job(row.get('download_job_id',''),row.get('client',''),release,x)]
+  matches=[x for x in live['rows'] if matches_job(row.get('download_job_id',''),row.get('client',''),release,x) and available_to(row,x)]
   if len(matches)==1:
    match=matches[0]
    if row['status'] in ('failed','import-failed'):

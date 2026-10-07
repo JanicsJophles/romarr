@@ -3162,29 +3162,84 @@ RENDER.platforms=async()=>{
 // Every other *arr shows you a list of blocked releases. This shows why each
 // one is blocked, which is the only form of the answer anybody can act on.
 RENDER.blocklist=async()=>{
-  const d=await j('/api/v1/blocklist').catch(()=>({items:[]}));
-  const items=d.items||[];
+  const page=$('#page'),route=location.hash;
+  const generation=(RENDER.blocklist.generation||0)+1;
+  RENDER.blocklist.generation=generation;
+  let view;
+  const current=()=>RENDER.blocklist.generation===generation&&location.hash===route&&page.firstElementChild===view;
+  const read=async(url,options)=>{
+    const response=await fetch(url,{...options,signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw new Error('The server could not complete this action (HTTP '+response.status+').');
+    return response.json();
+  };
+  page.innerHTML='<div class="card"><h3>Blocklist</h3><p role="status">Loading blocked releases…</p></div>';
+  view=page.firstElementChild;
+  let d;
+  try{
+    d=await read('/api/v1/blocklist');
+    if(!Array.isArray(d.items))throw new Error('The server returned an invalid blocklist.');
+  }catch(e){
+    if(!current())return;
+    page.innerHTML='<div class="card"><h3>Blocklist unavailable</h3><p role="alert">'
+      +esc(e.message||'Could not load blocked releases.')+'</p><button id="retry-blocklist">Try again</button></div>';
+    page.querySelector('#retry-blocklist').onclick=()=>RENDER.blocklist();return;
+  }
+  if(!current())return;
+  const items=d.items;
   const when=t=>t?new Date(t*1000).toLocaleString():'—';
-  $('#page').innerHTML='<div class="card"><h3>Blocklist '
+  page.innerHTML='<div class="card"><h3>Blocklist '
     +'<span class="help" style="margin-left:8px">'+items.length+'</span></h3>'
-    +'<p class="help">Releases ROMarr will never take again. Each carries the '
-    +'reason it was blocked, so lifting one is a decision rather than a guess.</p>'
+    +'<p class="help">Blocked releases are excluded from future searches. Review the reason before lifting a block. '
+    +'Timeout review checks older outage-related blocks against saved queue evidence; repairing a block does not retry a download.</p>'
     +(items.length
       ?'<table><thead><tr><th>Release</th><th>Indexer</th><th>Reason</th>'
-       +'<th>Blocked</th><th></th></tr></thead><tbody>'
+       +'<th>Blocked</th><th>Actions</th></tr></thead><tbody>'
        +items.map(i=>'<tr><td><b>'+esc(i.title||'(untitled)')+'</b>'
          +'<div class="help" style="margin:2px 0 0;font-size:11px">'+esc(i.id)+'</div></td>'
          +'<td>'+esc(i.indexer||'—')+'</td>'
          +'<td>'+esc(i.reason||'—')+'</td>'
          +'<td style="white-space:nowrap">'+esc(when(i.blocked_at))+'</td>'
-         +'<td><button class="mini" data-un="'+esc(i.id)+'">Unblock</button></td></tr>').join('')
+         +'<td><button class="mini" data-un="'+esc(i.id)+'">Unblock</button> '
+         +'<button class="mini" data-review="'+esc(i.id)+'">Review timeout block</button>'
+         +'<div class="help" role="status" data-block-status></div></td></tr>').join('')
        +'</tbody></table>'
       :'<div class="empty-cat"><b>Nothing blocked</b>'
-       +'A release lands here when a download fails or you reject it.</div>')
+       +'Releases appear here after a verified content failure or an operator decision.</div>')
     +'</div>';
-  $('#page').querySelectorAll('button[data-un]').forEach(b=>b.onclick=async()=>{
-    await fetch('/api/v1/blocklist/'+encodeURIComponent(b.dataset.un),{method:'DELETE'});
-    RENDER.blocklist();
+  view=page.firstElementChild;
+  page.querySelectorAll('button[data-un]').forEach(b=>{
+    const cell=b.parentElement,review=cell.querySelector('button[data-review]'),status=cell.querySelector('[data-block-status]');
+    let busy=false,approved=false;
+    const act=async(action)=>{
+      if(busy||!current())return;
+      busy=true;b.disabled=true;review.disabled=true;status.textContent='Working…';
+      try{await action();}catch(e){if(current())status.textContent=e.message||'Action failed. Refresh the blocklist before trying again.';}
+      finally{busy=false;if(current()){b.disabled=false;review.disabled=false;}}
+    };
+    b.onclick=()=>act(async()=>{
+      const result=await read('/api/v1/blocklist/'+encodeURIComponent(b.dataset.un),{method:'DELETE'});
+      if(!current())return;
+      if(result.deleted!==true)throw new Error('The block was not removed. Refresh before trying again.');
+      await RENDER.blocklist();
+    });
+    review.onclick=()=>act(async()=>{
+      const applying=approved;
+      const result=await read('/api/v1/blocklist/repair-timeouts',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({release_ids:[b.dataset.un],apply:applying})});
+      if(!current())return;
+      if(applying){
+        if(!Array.isArray(result.repaired)||!result.repaired.includes(b.dataset.un)){
+          approved=false;review.textContent='Review timeout block';
+          throw new Error('This block is no longer eligible for timeout repair. Nothing was changed.');
+        }
+        await RENDER.blocklist();return;
+      }
+      approved=Array.isArray(result.eligible)&&result.eligible.includes(b.dataset.un);
+      review.textContent=approved?'Repair timeout block':'Review timeout block';
+      status.textContent=approved
+        ?'Saved queue evidence matches a legacy timeout. Repair removes only this block; no download will be retried.'
+        :'No matching legacy timeout evidence. This block has not been changed.';
+    });
   });
 };
 

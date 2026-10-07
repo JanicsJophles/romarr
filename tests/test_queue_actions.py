@@ -16,7 +16,7 @@ def test_remove_forgets_one_row(tmp_path):
     assert [q.game for q in s.queue] == ["B"]
 
 
-def test_retry_reruns_the_request_and_drops_the_stale_row(tmp_path, monkeypatch):
+def test_retry_reruns_the_request_and_preserves_the_prior_attempt(tmp_path, monkeypatch):
     s = svc(tmp_path)
     s.queue = [QueueItem("Chrono Trigger", "snes", "", 0, "failed",
                          "no usable release")]
@@ -30,8 +30,8 @@ def test_retry_reruns_the_request_and_drops_the_stale_row(tmp_path, monkeypatch)
     out = s.queue_action(0, "retry")
     assert out["ok"]
     assert called["args"] == ("Chrono Trigger", "snes")
-    # The stale failed row is gone; the retry's own outcome replaces it.
-    assert all(q.detail != "no usable release" for q in s.queue)
+    # Keep prior evidence; real requests append a new attempt for projection.
+    assert s.queue[0].detail == "no usable release"
 
 
 def test_an_out_of_range_index_is_a_clean_error(tmp_path):

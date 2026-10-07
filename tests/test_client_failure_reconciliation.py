@@ -119,3 +119,101 @@ def test_known_failure_reason_is_actionable_without_raw_provider_text(tmp_path, 
     assert expected in row.detail
     assert 'private' not in row.detail and 'secret' not in row.detail
     assert not row.release_fault and row.review_required
+
+
+def legacy_timeout(svc, identity='fixture-id'):
+    row = queued(svc)
+    row.release_id = identity
+    row.state = 'failed'
+    row.release_fault = row.blocklisted = True
+    row.detail = 'stalled: no import after 180 minutes'
+    entry = svc.block_id(identity, title=row.release, reason=row.detail)
+    entry.pop('source')  # Historical records did not distinguish operator/automatic.
+    svc.store.put_item('blocklist', entry)
+    svc.store.save()
+    return row
+
+
+def test_legacy_normalization_survives_restart_with_automation_disabled(tmp_path):
+    svc = service(tmp_path)
+    row = legacy_timeout(svc)
+    svc.store.settings['blocklist_failed_downloads'] = False
+    svc.retire_dead_downloads()
+    restored = service(tmp_path)
+    assert not restored.queue[0].release_fault
+    assert restored.queue[0].review_required
+    assert restored.queue[0].blocklisted  # Unreviewed historical decisions stay.
+    assert len(restored.blocklist) == 1
+
+
+def test_explicit_timeout_repair_preview_apply_idempotence_and_restart(tmp_path):
+    svc = service(tmp_path)
+    row = legacy_timeout(svc)
+    svc.request = Mock(side_effect=AssertionError('Repair cannot download'))
+    assert svc.repair_timeout_blocks([])['eligible'] == []
+    preview = svc.repair_timeout_blocks([row.release_id])
+    assert preview['eligible'] == [row.release_id] and preview['count'] == 0
+    assert row.blocklisted and len(svc.blocklist) == 1
+    assert svc.repair_timeout_blocks([row.release_id], apply=True)['count'] == 1
+    assert svc.repair_timeout_blocks([row.release_id], apply=True)['count'] == 0
+    restored = service(tmp_path)
+    assert len(restored.blocklist) == 0
+    assert not restored.queue[0].blocklisted and not restored.queue[0].release_fault
+    assert restored.queue[0].review_required and restored.queue[0].state == 'failed'
+    assert len([e for e in restored.store.history() if 'explicitly reviewed' in e['detail']]) == 1
+    svc.request.assert_not_called()
+
+
+@pytest.mark.parametrize('variation', ['manual', 'content', 'missing', 'mismatch', 'imported', 'other-id'])
+def test_timeout_repair_preserves_unproven_and_manual_blocks(tmp_path, variation):
+    svc = service(tmp_path)
+    row = legacy_timeout(svc)
+    approved = [row.release_id]
+    if variation == 'manual':
+        svc.block_id(row.release_id, title=row.release, reason=row.detail)
+    elif variation == 'content':
+        row.detail = 'no ROMs found in download'
+    elif variation == 'missing':
+        svc.queue = []
+    elif variation == 'mismatch':
+        row.detail = 'stalled: no import after 999 minutes'
+    elif variation == 'imported':
+        row.state = 'imported'
+    elif variation == 'other-id':
+        approved = ['another-id']
+    assert svc.repair_timeout_blocks(approved, apply=True)['count'] == 0
+    assert len(svc.blocklist) == 1
+
+
+def test_timeout_repair_concurrent_calls_record_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    svc = service(tmp_path)
+    row = legacy_timeout(svc)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: svc.repair_timeout_blocks([row.release_id], apply=True), range(8)))
+    assert sum(result['count'] for result in results) == 1
+
+
+def test_block_provenance_survives_policy_reload_and_restart(tmp_path):
+    svc = service(tmp_path)
+    row = legacy_timeout(svc)
+    svc.block_id(row.release_id, title=row.release, reason=row.detail)
+    svc.reload_policy()
+    assert svc.blocklist.as_items()[0]['source'] == 'operator'
+    assert svc.repair_timeout_blocks([row.release_id], apply=True)['count'] == 0
+    restarted = service(tmp_path)
+    assert restarted.blocklist.as_items()[0]['source'] == 'operator'
+    assert restarted.repair_timeout_blocks([row.release_id], apply=True)['count'] == 0
+
+
+def test_automatic_content_provenance_survives_reload_and_restart(tmp_path):
+    svc = service(tmp_path)
+    row = queued(svc)
+    row.state = 'import-failed'
+    row.release_fault = True
+    row.detail = 'no ROMs found in download'
+    svc.request = Mock(return_value={'ok': False})
+    assert svc.retire_dead_downloads()['blocklisted'] == 1
+    svc.reload_policy()
+    assert svc.blocklist.as_items()[0]['source'] == 'automatic-content-failure'
+    assert service(tmp_path).blocklist.as_items()[0]['source'] == 'automatic-content-failure'

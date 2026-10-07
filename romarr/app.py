@@ -335,7 +335,7 @@ class ROMarr:
         # the Search page can grab one without ever being handed a download URL
         # carrying Prowlarr's API key.
         self._candidates: dict[str, dict] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         # Lets a configuration change wake the background refresh instead of
         # waiting out its interval. Created before reload_libraries, which sets
         # it.
@@ -1656,31 +1656,82 @@ class ROMarr:
         }
 
     def queue_action(self, index: int, action: str) -> dict:
-        """Act on one queue row: retry it, or forget it.
-
-        The queue was a read-only list -- a download could sit "failed" with
-        its reason shown and no way to do anything about it but edit the
-        state file. Retry re-runs the request through the normal path;
-        remove forgets a row that is done with (imported, or a failure you
-        have read).
-        """
+        """Retry a failed attempt without losing it or duplicating active work."""
         with self._lock:
             if not 0 <= index < len(self.queue):
                 return {"ok": False, "error": "no such queue item"}
             item = self.queue[index]
-        if action == "remove":
+            if action == "remove":
+                # Selection and mutation share the lock; another action cannot
+                # shift this index between the two operations.
+                self.queue = [q for q in self.queue if q is not item]
+                return {"ok": True, "removed": True}
+            if action != "retry":
+                return {"ok": False, "error": f"unknown action {action!r}"}
+            if item.state != "failed":
+                return {"ok": False, "error": "only failed downloads can be retried; inspect the existing job or import first"}
+
+            def key(row):
+                platform = resolve(row.platform)
+                return (row.game.strip().casefold(),
+                        platform.slug if platform else row.platform.strip().casefold())
+
+            identity = key(item)
+            # Keep the reservation separate from durable attempts: an interrupted
+            # process must not leave a permanently 'retrying' queue row behind.
+            pending = self.__dict__.setdefault("_queue_retries", set())
+            if identity in pending:
+                return {"ok": False, "error": "a retry for this game is already in progress"}
+            if any(key(q) == identity and q.state in ("queued", "searching", "grabbed", "import-failed", "imported")
+                   for q in self.queue):
+                return {"ok": False, "error": "this game already has a download or import; inspect that attempt first"}
+            pending.add(identity)
+        try:
+            # Check every prior attempt for this game: a newer empty search
+            # failure must not hide an older timed-out but still-live torrent.
+            # Legacy timeouts incorrectly marked release_fault also need this
+            # check even when the background repair task has never run.
             with self._lock:
-                self.queue = [q for n, q in enumerate(self.queue)
-                              if n != index]
-            return {"ok": True, "removed": True}
-        if action == "retry":
-            # Drop the stale row first so the retry's outcome is the only
-            # one for this game, then run the same request a person would.
+                attempts = [row for row in self.queue if key(row) == identity and
+                            (row.download_job_id or (row.release and
+                             (not row.release_fault or self._temporary_failure_detail(row.detail))))]
+            if attempts:
+                from .download_status import snapshot
+                from .download_identity import matches_job
+                try:
+                    live = snapshot(self)
+                except Exception:
+                    return {"ok": False, "error": "cannot verify the existing download; inspect the client before retrying"}
+                for attempt in attempts:
+                    matches = [report for report in live.get("rows", [])
+                               if matches_job(attempt.download_job_id, attempt.download_client,
+                                              attempt.release, report)]
+                    errors = live.get("errors", [])
+                    unavailable = any(not attempt.download_client or
+                                      str(error).startswith(attempt.download_client + " ")
+                                      for error in errors)
+                    # A legacy title match must belong uniquely to this attempt,
+                    # not to a previous/newer row with the same release title.
+                    if not attempt.download_job_id and len(matches) == 1:
+                        with self._lock:
+                            owners = [row for row in self.queue
+                                      if matches_job(row.download_job_id, row.download_client,
+                                                     row.release, matches[0])]
+                        if len(owners) != 1 or owners[0] is not attempt:
+                            matches = []
+                    if unavailable or len(matches) != 1:
+                        return {"ok": False, "error": "the existing download is unavailable or ambiguous; inspect the client before retrying"}
+                    if matches[0].get("status") != "failed":
+                        return {"ok": False, "error": "the existing download is still present; review that client job before retrying"}
+            kwargs = ({"external_request_id": item.external_request_id}
+                      if item.external_request_id else {})
+            # Preserve the old attempt even after success: its client job ID
+            # owns stale client history, preventing reassignment to this retry.
+            # The newest attempt is projected as the current request status.
+            return self.request(item.game, item.platform, **kwargs)
+        finally:
             with self._lock:
-                self.queue = [q for n, q in enumerate(self.queue)
-                              if n != index]
-            return self.request(item.game, item.platform)
-        return {"ok": False, "error": f"unknown action {action!r}"}
+                pending.discard(identity)
 
     def clear_queue(self, state: str = "") -> dict:
         """Empty the queue, or just the rows in one state.
@@ -1971,17 +2022,21 @@ class ROMarr:
 
     def block(self, release, reason: str = "") -> dict:
         """Never take this release again, and record why."""
-        entry = self.blocklist.add(release, reason=reason)
-        self.store.put_item("blocklist", entry)
-        return entry
+        with self._lock:
+            entry = self.blocklist.add(release, reason=reason)
+            entry["source"] = "operator"
+            self.store.put_item("blocklist", entry)
+            return entry
 
     def block_id(self, entry_id: str, *, title: str = "", indexer: str = "",
                  size: int = 0, reason: str = "") -> dict:
         """Block one release identity, for callers holding a queue row."""
-        entry = self.blocklist.add_entry(entry_id, title=title, indexer=indexer,
-                                         size=size, reason=reason)
-        self.store.put_item("blocklist", entry)
-        return entry
+        with self._lock:
+            entry = self.blocklist.add_entry(entry_id, title=title, indexer=indexer,
+                                             size=size, reason=reason)
+            entry["source"] = "operator"
+            self.store.put_item("blocklist", entry)
+            return entry
 
     #: How many replacement grabs one sweep may make. A dead release is
     #: retired the moment it is noticed, but every replacement costs a full
@@ -2004,40 +2059,48 @@ class ROMarr:
         can reflect network/VPN/configuration problems and never proves a bad
         release. Client-reported failures need operator review before retrying.
         """
-        if not self.store.settings.get("blocklist_failed_downloads", True):
-            return {"blocklisted": 0, "regrabbed": 0,
-                    "message": "failed download handling is off"}
-
-        # Age and an unavailable client are not evidence that a release is bad.
-        # Only failures already classified from content may enter the blocklist.
+        # Normalize persisted legacy flags even when scheduled retries are off.
+        # Do not silently remove an operator's persisted blocklist decision.
+        changed = False
         dead: list[QueueItem] = []
         with self._lock:
             for row in self.queue:
-                if row.blocklisted or not row.release_id:
+                if row.state in ("failed", "import-failed") and self._temporary_failure_detail(row.detail):
+                    if row.release_fault or not row.review_required:
+                        row.release_fault = False
+                        row.review_required = True
+                        changed = True
                     continue
-                # Old builds marked an elapsed timer or a rejected handoff as
-                # release_fault. Do not let that legacy flag punish an outage.
-                if row.detail.startswith("stalled:") or "rejected the release" in row.detail:
-                    row.release_fault = False
-                    row.review_required = True
-                    continue
-                if row.state in ("failed", "import-failed") and row.release_fault:
+                if (not row.blocklisted and row.release_id
+                        and row.state in ("failed", "import-failed") and row.release_fault):
                     dead.append(row)
+        if changed:
+            self.store.save()
+        if not self.store.settings.get("blocklist_failed_downloads", True):
+            return {"blocklisted": 0, "regrabbed": 0,
+                    "message": "failed download handling is off"}
 
         blocklisted = 0
         regrabbed = 0
         retried: set[tuple[str, str]] = set()
         for row in dead:
-            reason = row.detail or f"download {row.state}"
-            self.block_id(row.release_id, title=row.release,
-                          indexer=row.indexer, size=row.size,
-                          reason=reason)
-            row.blocklisted = True
-            blocklisted += 1
-            self.store.record(Event(kind="ignored", game=row.game,
-                                    platform=row.platform, release=row.release,
-                                    indexer=row.indexer,
-                                    detail=f"blocklisted -- {reason}"))
+            with self._lock:
+                # Another sweep or explicit repair may have changed this row.
+                if row.blocklisted or not row.release_fault or row.state not in ("failed", "import-failed"):
+                    continue
+                reason = row.detail or f"download {row.state}"
+                # Never overwrite a manual block's reason or provenance.
+                if not any(item["id"] == row.release_id for item in self.blocklist.as_items()):
+                    entry = self.block_id(row.release_id, title=row.release,
+                                          indexer=row.indexer, size=row.size, reason=reason)
+                    entry["source"] = "automatic-content-failure"
+                    self.store.put_item("blocklist", entry)
+                row.blocklisted = True
+                blocklisted += 1
+                self.store.record(Event(kind="ignored", game=row.game,
+                                        platform=row.platform, release=row.release,
+                                        indexer=row.indexer,
+                                        detail=f"blocklisted -- {reason}"))
             key = (row.game.lower(), row.platform)
             if key in retried or regrabbed >= self.MAX_REGRABS_PER_SWEEP:
                 continue
@@ -2058,6 +2121,58 @@ class ROMarr:
                 "message": message}
 
     @staticmethod
+    def _temporary_failure_detail(detail: str) -> bool:
+        """Recognize historical handoff/timer failures, never content evidence.
+
+        Keep this narrow: arbitrary operator notes mentioning a timeout or a
+        network must not erase a real content failure.
+        """
+        text = str(detail or "").strip().casefold()
+        return (text.startswith("stalled:")
+                or text.endswith("rejected the release"))
+
+    def repair_timeout_blocks(self, approved_release_ids: list[str], *, apply: bool = False) -> dict:
+        """Remove explicitly reviewed legacy timeout blocks, without retrying.
+
+        Old records have no reliable manual/automatic provenance. Callers must
+        supply the identities the operator approved; an empty list is a no-op.
+        Even an approved id needs matching persisted timeout evidence. Never
+        touch content blocks, other releases, client jobs, or imported rows.
+        """
+        repaired = []
+        eligible = []
+        with self._lock:
+            for entry in self.blocklist.as_items():
+                entry_id = entry["id"]
+                if (entry_id not in approved_release_ids
+                        or entry.get("source") not in (None, "", "automatic-timeout")
+                        or not self._temporary_failure_detail(entry.get("reason", ""))):
+                    continue
+                rows = [row for row in self.queue if row.release_id == entry_id]
+                matching = [row for row in rows
+                            if row.state == "failed" and row.blocklisted
+                            and row.detail == entry.get("reason")]
+                if not matching or any(row.release_fault and not self._temporary_failure_detail(row.detail)
+                                       for row in rows):
+                    continue
+                eligible.append(entry_id)
+                if not apply:
+                    continue
+                self.unblock(entry_id)
+                for row in matching:
+                    row.blocklisted = False
+                    row.release_fault = False
+                    row.review_required = True
+                row = matching[0]
+                self.store.record(Event(kind="ignored", game=row.game, platform=row.platform,
+                                        release=row.release, indexer=row.indexer,
+                                        detail="Removed an explicitly reviewed legacy timeout block; no download was retried."))
+                repaired.append(entry_id)
+            if repaired:
+                self.store.save()
+        return {"eligible": eligible, "repaired": repaired, "count": len(repaired), "applied": apply}
+
+    @staticmethod
     def _row_age_minutes(row, now) -> float | None:
         """How long this row has been waiting, or None if it will not say."""
         try:
@@ -2069,8 +2184,9 @@ class ROMarr:
         return (now - stamped).total_seconds() / 60.0
 
     def unblock(self, entry_id: str) -> bool:
-        self.blocklist.remove(entry_id)
-        return self.store.delete_item("blocklist", entry_id)
+        with self._lock:
+            self.blocklist.remove(entry_id)
+            return self.store.delete_item("blocklist", entry_id)
 
     def notify(self, message) -> list[dict]:
         """Fan out, and never let a failure here matter.
@@ -5219,6 +5335,16 @@ def make_handler(service: ROMarr):
                     # the index that nobody could account for.
                     return self._json(400, {"ok": False, "error": str(exc)})
                 return self._json(200, report)
+            if route.path == "/api/v1/blocklist/repair-timeouts":
+                if not isinstance(body, dict):
+                    return self._json(400, {"error": "Expected a JSON object"})
+                ids = body.get("release_ids")
+                apply = body.get("apply", False)
+                if (not isinstance(ids, list) or len(ids) > 100
+                        or any(not isinstance(value, str) or not value or len(value) > 512 for value in ids)
+                        or not isinstance(apply, bool)):
+                    return self._json(400, {"error": "release_ids must contain at most 100 nonempty identities; apply must be boolean"})
+                return self._json(200, service.repair_timeout_blocks(ids, apply=apply))
             if route.path == "/api/v1/blocklist":
                 # A release is blocked by identity, so a title the indexer
                 # rewrites tomorrow is still the same block.
